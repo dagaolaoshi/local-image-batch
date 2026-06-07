@@ -1,7 +1,5 @@
 # local-image-batch 📸
 
-[中文](#中文说明) | [English](#english-documentation)
-
 ---
 
 ## 中文说明
@@ -26,7 +24,7 @@ local-image-batch 是一款基于 HTML5 Canvas 和纯前端生态构建的**高�
 
 ## English Documentation   英文文档
 
-local-image-batch is a high-fidelity **client-side image batch processing and format conversion tool** built entirely on the HTML5 Canvas ecosystem. The entire workflow is executed inside the user's local browser sandbox without any backend server overhead, ensuring 100% data privacy and blazing-fast response times.WebPicKit是一个高保真**客户端图像批处理和格式转换工具**完全建立在HTML5画布生态系统。整个工作流在用户的本地浏览器沙盒内执行，没有任何后端服务器开销，确保100%的数据隐私和极快的响应时间。
+local-image-batch is a high-fidelity **client-side image batch processing and format conversion tool客户端图像批处理和格式转换工具** built entirely on the HTML5 Canvas ecosystem. The entire workflow is executed inside the user's local browser sandbox without any backend server overhead, ensuring 100% data privacy and blazing-fast response times.WebPicKit是一个高保真**客户端图像批处理和格式转换工具**完全建立在HTML5画布生态系统。整个工作流在用户的本地浏览器沙盒内执行，没有任何后端服务器开销，确保100%的数据隐私和极快的响应时间。
 
 🚀 **[Live Demo Available Here](https://dagaolaoshi.github.io/WebPicKit/)**
 
