@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>local-image-batch - 纯前端本地高保真图片批处理工具</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.2/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body class="bg-base-300 min-h-screen p-8 text-base-content">
+
+    <div class="max-w-4xl mx-auto space-y-6">
+        <header class="text-center space-y-2">
+            <h1 class="text-4xl font-bold tracking-tight text-primary">local-image-batch 📸</h1>
+            <p class="text-gray-400 text-sm">纯前端本地高保真图片批处理工具 • 零服务器上传 • 隐私安全</p>
+        </header>
+
+        <div class="card bg-base-100 shadow-xl p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="form-control">
+                <label class="label"><span class="label-text font-bold">1. 目标格式</span></label>
+                <select id="formatSelect" class="select select-bordered w-full">
+                    <option value="image/webp">WebP (推荐，体积小)</option>
+                    <option value="image/jpeg">JPEG (经典通用)</option>
+                    <option value="image/png">PNG (无损透明)</option>
+                </select>
+            </div>
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text font-bold">2. 压缩质量</span>
+                    <span id="qualityVal" class="label-text-alt text-primary font-bold">85%</span>
+                </label>
+                <input id="qualitySlider" type="range" min="10" max="100" value="85" class="range range-primary" />
+            </div>
+            <div class="flex items-end">
+                <button id="downloadAllBtn" class="btn btn-primary w-full shadow-lg" disabled>
+                    📦 批量打包下载 (.zip)
+                </button>
+            </div>
+        </div>
+
+        <div id="dropZone" class="border-2 border-dashed border-primary/40 hover:border-primary bg-base-100 rounded-2xl p-10 text-center cursor-pointer transition-all">
+            <input type="file" id="fileInput" multiple accept="image/*" class="hidden" />
+            <div class="space-y-2">
+                <p class="text-xl font-medium">把图片拖到这里，或者 <span class="text-primary underline">点击浏览</span></p>
+                <p class="text-xs text-gray-500">支持多选同时上传，在本地浏览器完成处理，不消耗任何网络流量</p>
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            <h3 class="text-lg font-bold flex items-center gap-2">🔄 处理队列 <span id="queueCount" class="badge badge-secondary">0</span></h3>
+            <div id="previewContainer" class="grid grid-cols-1 gap-4">
+                </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. 获取所有需要的 DOM 元素
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const formatSelect = document.getElementById('formatSelect');
+        const qualitySlider = document.getElementById('qualitySlider');
+        const qualityVal = document.getElementById('qualityVal');
+        const downloadAllBtn = document.getElementById('downloadAllBtn');
+        const previewContainer = document.getElementById('previewContainer');
+        const queueCount = document.getElementById('queueCount');
+
+        // 存储当前处理成功的所有图片数据，用于最后的打包
+        let processedImages = []; 
+
+        // 2. 监听质量滑块变化
+        qualitySlider.addEventListener('input', (e) => {
+            qualityVal.textContent = e.target.value + '%';
+        });
+
+        // 3. 绑定上传事件（点击和拖拽）
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('bg-base-200'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('bg-base-200'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('bg-base-200');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        // 4. 核心：遍历处理上传的文件
+        function handleFiles(files) {
+            const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+            if (imageFiles.length === 0) return;
+
+            // 清空上一次的记录
+            previewContainer.innerHTML = '';
+            processedImages = [];
+            downloadAllBtn.disabled = true;
+            queueCount.textContent = imageFiles.length;
+
+            // 获取当前用户选定的目标格式和质量
+            const targetMime = formatSelect.value;
+            const targetExt = targetMime.split('/')[1];
+            const quality = qualitySlider.value / 100;
+
+            imageFiles.forEach(file => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = function(event) {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = function() {
+                        // --- 核心 Canvas 转换黑科技 ---
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+
+                        // 导出新格式的 Base64 数据
+                        const newDataUrl = canvas.toDataURL(targetMime, quality);
+                        
+                        // 计算原始大小和新大小（单位：KB）
+                        const originalSize = (file.size / 1024).toFixed(1);
+                        const newSize = ((newDataUrl.length * 0.75) / 1024).toFixed(1); // 估算 base64 大小
+
+                        // 准备好文件名，用于后续下载
+                        const originalNameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.'));
+                        const newFileName = `${originalNameWithoutExt}_processed.${targetExt}`;
+
+                        // 将处理后的数据存入全局数组，留给打包用
+                        processedImages.push({ name: newFileName, dataUrl: newDataUrl });
+
+                        // 渲染 UI 卡片展示对比结果
+                        renderPreviewCard(file.name, originalSize, newFileName, newSize, newDataUrl);
+
+                        // 如果全部处理完毕，激活打包按钮
+                        if (processedImages.length === imageFiles.length) {
+                            downloadAllBtn.disabled = false;
+                        }
+                    }
+                };
+            });
+        }
+
+        // 5. 渲染预览对比卡片的函数
+        function renderPreviewCard(oldName, oldSize, newName, newSize, dataUrl) {
+            const card = document.createElement('div');
+            card.className = "card card-side bg-base-100 shadow border border-base-200 p-4 flex flex-col sm:flex-row justify-between items-center gap-4";
+            
+            // 计算压缩率
+            const ratio = ((1 - (newSize / oldSize)) * 100).toFixed(0);
+            const badgeColor = ratio > 0 ? 'badge-success' : 'badge-warning';
+            const badgeText = ratio > 0 ? `瘦身 ${ratio}%` : `体积增加 (无损格式)`;
+
+            card.innerHTML = `
+                <div class="flex items-center gap-4 w-full sm:w-auto">
+                    <img src="${dataUrl}" class="w-16 h-16 object-cover rounded-lg border border-base-300 shadow-inner" />
+                    <div>
+                        <h4 class="font-bold text-sm truncate max-w-xs">${oldName}</h4>
+                        <p class="text-xs text-gray-500">原始体积: ${oldSize} KB</p>
+                        <div class="mt-1 flex items-center gap-2">
+                            <span class="badge ${badgeColor} badge-sm font-semibold">${badgeText}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-right w-full sm:w-auto flex sm:flex-col justify-between sm:justify-center items-center sm:items-end gap-2">
+                    <div>
+                        <p class="text-xs text-gray-400">转换后: <span class="text-primary font-bold">${newSize} KB</span></p>
+                    </div>
+                    <a href="${dataUrl}" download="${newName}" class="btn btn-xs btn-outline btn-primary">单独下载</a>
+                </div>
+            `;
+            previewContainer.appendChild(card);
+        }
+
+        // 6. 核心：使用 JSZip 批量打包并下载
+        downloadAllBtn.addEventListener('click', () => {
+            const zip = new JSZip();
+            
+            // 遍历我们将 base64 还原为二进制文件塞进 zip
+            processedImages.forEach(img => {
+                const byteString = atob(img.dataUrl.split(',')[1]);
+                const mimeString = img.dataUrl.split(',')[0].split(':')[1].split(';')[0];
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) {
+                    ia[i] = byteString.charCodeAt(i);
+                }
+                const blob = new Blob([ab], { type: mimeString });
+                zip.file(img.name, blob);
+            });
+
+            // 生成 zip 并触发浏览器下载
+            zip.generateAsync({ type: 'blob' }).then(content => {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = `local-image-batch批量图片_2026.zip`;
+                link.click();
+            });
+        });
+    </script>
+</body>
+</html>
